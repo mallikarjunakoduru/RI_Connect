@@ -148,7 +148,6 @@ export default function CreateScreen() {
           .single();
 
         categoryId = categoryData?.id || null;
-        console.log('Category lookup:', postCategory, '->', categoryId);
       }
 
       // Create the post
@@ -175,8 +174,6 @@ export default function CreateScreen() {
 
         if (linkError) {
           console.error('Error linking category:', linkError);
-        } else {
-          console.log('Category linked successfully');
         }
       }
 
@@ -219,13 +216,6 @@ export default function CreateScreen() {
     try {
       const price = listingType === 'free' ? null : parseFloat(listingPrice) || null;
 
-      console.log('Creating listing with:', {
-        seller_id: profile.id,
-        title: listingTitle.trim(),
-        listing_type: listingType,
-        category: listingCategory,
-      });
-
       const { data: listing, error: listingError } = await supabase
         .from('listings')
         .insert({
@@ -244,8 +234,6 @@ export default function CreateScreen() {
         .single();
 
       if (listingError) throw listingError;
-
-      console.log('Listing created successfully:', listing);
 
       setStatus({
         type: 'success',
