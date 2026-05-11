@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
 import { ListingWithSeller } from '../components/listings';
+import { getUserFriendlyError } from '../utils';
 
 interface UseListingsOptions {
   categoryFilter?: string;
@@ -9,11 +10,12 @@ interface UseListingsOptions {
 }
 
 export function useListings(options: UseListingsOptions = {}) {
-  const { user } = useAuth();
+  const { user, isInitialized } = useAuth();
   const [listings, setListings] = useState<ListingWithSeller[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isMounted = useRef(true);
 
   const { categoryFilter, typeFilter } = options;
 
@@ -25,8 +27,6 @@ export function useListings(options: UseListingsOptions = {}) {
         setIsLoading(true);
       }
       setError(null);
-
-      console.log('Fetching listings...', { categoryFilter, typeFilter });
 
       let query = supabase
         .from('listings')
@@ -45,28 +45,26 @@ export function useListings(options: UseListingsOptions = {}) {
 
       const { data: listingsData, error: listingsError } = await query;
 
-      console.log('Listings query result:', {
-        count: listingsData?.length || 0,
-        error: listingsError,
-      });
-
       if (listingsError) throw listingsError;
+      if (!isMounted.current) return;
 
       if (!listingsData || listingsData.length === 0) {
         setListings([]);
+        setIsLoading(false);
+        setIsRefreshing(false);
         return;
       }
 
-      // Get seller profiles
       const sellerIds = [...new Set(listingsData.map((l) => l.seller_id))];
       const { data: profiles } = await supabase
         .from('profiles')
         .select('id, display_name, avatar_url')
         .in('id', sellerIds);
 
+      if (!isMounted.current) return;
+
       const profileMap = new Map(profiles?.map((p) => [p.id, p]) || []);
 
-      // Get user's saved listings
       let savedListingIds: string[] = [];
       if (user) {
         const { data: saved } = await supabase
@@ -76,7 +74,8 @@ export function useListings(options: UseListingsOptions = {}) {
         savedListingIds = saved?.map((s) => s.listing_id) || [];
       }
 
-      // Transform the data
+      if (!isMounted.current) return;
+
       const transformedListings: ListingWithSeller[] = listingsData.map((listing: any) => ({
         ...listing,
         seller: profileMap.get(listing.seller_id) || {
@@ -87,14 +86,17 @@ export function useListings(options: UseListingsOptions = {}) {
         isSaved: savedListingIds.includes(listing.id),
       }));
 
-      console.log('Listings transformed:', transformedListings.length);
       setListings(transformedListings);
     } catch (err: any) {
       console.error('Error fetching listings:', err);
-      setError(err.message || 'Failed to load listings');
+      if (isMounted.current) {
+        setError(getUserFriendlyError(err));
+      }
     } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
+      if (isMounted.current) {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
     }
   }, [user?.id, categoryFilter, typeFilter]);
 
@@ -106,7 +108,6 @@ export function useListings(options: UseListingsOptions = {}) {
 
     const isCurrentlySaved = listing.isSaved;
 
-    // Optimistic update
     setListings((prev) =>
       prev.map((l) =>
         l.id === listingId ? { ...l, isSaved: !isCurrentlySaved } : l
@@ -128,7 +129,6 @@ export function useListings(options: UseListingsOptions = {}) {
       }
     } catch (err) {
       console.error('Error toggling save:', err);
-      // Revert optimistic update
       setListings((prev) =>
         prev.map((l) =>
           l.id === listingId ? { ...l, isSaved: isCurrentlySaved } : l
@@ -138,8 +138,16 @@ export function useListings(options: UseListingsOptions = {}) {
   }, [user, listings]);
 
   useEffect(() => {
-    fetchListings();
-  }, [fetchListings]);
+    isMounted.current = true;
+
+    if (isInitialized) {
+      fetchListings();
+    }
+
+    return () => {
+      isMounted.current = false;
+    };
+  }, [isInitialized, categoryFilter, typeFilter]);
 
   const refresh = useCallback(() => {
     fetchListings(true);

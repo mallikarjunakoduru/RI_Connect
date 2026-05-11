@@ -149,9 +149,9 @@ export default function HomeScreen() {
             <PostCard
               post={item}
               onLike={toggleLike}
-              onComment={(id) => showComingSoon('Comments')}
+              onComment={(id) => router.push(`/post/${id}`)}
               onShare={(id) => showComingSoon('Share')}
-              onPress={(id) => showComingSoon('Post details')}
+              onPress={(id) => router.push(`/post/${id}`)}
               onAuthorPress={(id) => showComingSoon('User profile')}
             />
           )}

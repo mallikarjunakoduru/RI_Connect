@@ -29,12 +29,20 @@ jest.mock('./src/lib/supabase', () => ({
       update: jest.fn().mockReturnThis(),
       delete: jest.fn().mockReturnThis(),
       eq: jest.fn().mockReturnThis(),
+      neq: jest.fn().mockReturnThis(),
       in: jest.fn().mockReturnThis(),
+      is: jest.fn().mockReturnThis(),
       or: jest.fn().mockReturnThis(),
       order: jest.fn().mockReturnThis(),
       limit: jest.fn().mockReturnThis(),
       single: jest.fn().mockResolvedValue({ data: null, error: null }),
+      maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
     })),
+    channel: jest.fn(() => ({
+      on: jest.fn().mockReturnThis(),
+      subscribe: jest.fn().mockReturnThis(),
+    })),
+    removeChannel: jest.fn(),
   },
 }));
 
@@ -81,6 +89,17 @@ jest.mock('lucide-react-native', () => {
     Search: mockIcon('search'),
     Plus: mockIcon('plus'),
     DollarSign: mockIcon('dollar-sign'),
+    ArrowLeft: mockIcon('arrow-left'),
+    Send: mockIcon('send'),
+    Trash2: mockIcon('trash'),
+    Home: mockIcon('home'),
+    Store: mockIcon('store'),
+    Image: mockIcon('image'),
+    Bookmark: mockIcon('bookmark'),
+    Settings: mockIcon('settings'),
+    LogOut: mockIcon('logout'),
+    Edit: mockIcon('edit'),
+    ChevronRight: mockIcon('chevron-right'),
   };
 });
 

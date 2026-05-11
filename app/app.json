@@ -16,7 +16,11 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.riverislands.connect",
-      "usesAppleSignIn": true
+      "usesAppleSignIn": true,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "buildNumber": "2"
     },
     "android": {
       "adaptiveIcon": {
@@ -24,7 +28,10 @@
         "backgroundColor": "#2563EB"
       },
       "package": "com.riverislands.connect",
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -54,9 +61,19 @@
       "typedRoutes": true
     },
     "extra": {
+      "router": {
+        "origin": false
+      },
       "eas": {
-        "projectId": "your-project-id"
+        "projectId": "cebaf704-077e-484c-bbbd-993c908d5ed8"
       }
+    },
+    "owner": "mkoduru",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/cebaf704-077e-484c-bbbd-993c908d5ed8"
     }
   }
 }

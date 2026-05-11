@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
 import { Profile, Conversation, Message } from '../types';
+import { getUserFriendlyError } from '../utils';
 
 export type ConversationWithDetails = Conversation & {
   otherUser: Pick<Profile, 'id' | 'display_name' | 'avatar_url'>;
@@ -9,11 +10,12 @@ export type ConversationWithDetails = Conversation & {
 };
 
 export function useConversations() {
-  const { user } = useAuth();
+  const { user, isInitialized } = useAuth();
   const [conversations, setConversations] = useState<ConversationWithDetails[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isMounted = useRef(true);
 
   const fetchConversations = useCallback(async (refresh = false) => {
     if (!user) {
@@ -30,8 +32,6 @@ export function useConversations() {
       }
       setError(null);
 
-      console.log('Fetching conversations...');
-
       const { data: convData, error: convError } = await supabase
         .from('conversations')
         .select('*')
@@ -40,8 +40,7 @@ export function useConversations() {
         .limit(20);
 
       if (convError) throw convError;
-
-      console.log('Conversations fetched:', convData?.length || 0);
+      if (!isMounted.current) return;
 
       if (!convData || convData.length === 0) {
         setConversations([]);
@@ -50,7 +49,6 @@ export function useConversations() {
         return;
       }
 
-      // Get participant profiles
       const participantIds = new Set<string>();
       convData.forEach((c) => {
         participantIds.add(c.participant_1);
@@ -62,9 +60,10 @@ export function useConversations() {
         .select('id, display_name, avatar_url')
         .in('id', [...participantIds]);
 
+      if (!isMounted.current) return;
+
       const profileMap = new Map(profiles?.map((p) => [p.id, p]) || []);
 
-      // Transform data
       const transformedConversations: ConversationWithDetails[] = convData.map((conv: any) => {
         const otherUserId = conv.participant_1 === user.id ? conv.participant_2 : conv.participant_1;
         const otherUser = profileMap.get(otherUserId) || {
@@ -82,16 +81,66 @@ export function useConversations() {
       setConversations(transformedConversations);
     } catch (err: any) {
       console.error('Error fetching conversations:', err);
-      setError(err.message || 'Failed to load conversations');
+      if (isMounted.current) {
+        setError(err.message || 'Failed to load conversations');
+      }
     } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
+      if (isMounted.current) {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
     }
-  }, [user]);
+  }, [user?.id]);
 
   useEffect(() => {
-    fetchConversations();
-  }, [user?.id]);
+    isMounted.current = true;
+
+    if (isInitialized && user) {
+      fetchConversations();
+    } else if (isInitialized) {
+      setConversations([]);
+      setIsLoading(false);
+    }
+
+    return () => {
+      isMounted.current = false;
+    };
+  }, [isInitialized, user?.id]);
+
+  const startConversation = useCallback(async (otherUserId: string, listingId?: string): Promise<string | null> => {
+    if (!user || user.id === otherUserId) return null;
+
+    try {
+      // Check if conversation already exists
+      const { data: existing } = await supabase
+        .from('conversations')
+        .select('id')
+        .or(`and(participant_1.eq.${user.id},participant_2.eq.${otherUserId}),and(participant_1.eq.${otherUserId},participant_2.eq.${user.id})`)
+        .maybeSingle();
+
+      if (existing) {
+        return existing.id;
+      }
+
+      // Create new conversation
+      const { data: newConv, error: createError } = await supabase
+        .from('conversations')
+        .insert({
+          participant_1: user.id,
+          participant_2: otherUserId,
+          listing_id: listingId || null,
+        })
+        .select('id')
+        .single();
+
+      if (createError) throw createError;
+
+      return newConv.id;
+    } catch (err) {
+      console.error('Error starting conversation:', err);
+      return null;
+    }
+  }, [user]);
 
   return {
     conversations,
@@ -99,6 +148,7 @@ export function useConversations() {
     isRefreshing,
     error,
     refresh: () => fetchConversations(true),
+    startConversation,
   };
 }
 
@@ -107,6 +157,7 @@ export function useMessages(conversationId: string | null) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const isMounted = useRef(true);
 
   const fetchMessages = useCallback(async () => {
     if (!conversationId || !user) {
@@ -126,10 +177,10 @@ export function useMessages(conversationId: string | null) {
         .order('created_at', { ascending: true });
 
       if (msgError) throw msgError;
+      if (!isMounted.current) return;
 
       setMessages(data || []);
 
-      // Mark messages as read
       await supabase
         .from('messages')
         .update({ read_at: new Date().toISOString() })
@@ -138,11 +189,15 @@ export function useMessages(conversationId: string | null) {
         .is('read_at', null);
     } catch (err: any) {
       console.error('Error fetching messages:', err);
-      setError(err.message || 'Failed to load messages');
+      if (isMounted.current) {
+        setError(err.message || 'Failed to load messages');
+      }
     } finally {
-      setIsLoading(false);
+      if (isMounted.current) {
+        setIsLoading(false);
+      }
     }
-  }, [conversationId, user]);
+  }, [conversationId, user?.id]);
 
   const sendMessage = useCallback(async (content: string) => {
     if (!conversationId || !user || !content.trim()) return;
@@ -156,7 +211,6 @@ export function useMessages(conversationId: string | null) {
 
       if (sendError) throw sendError;
 
-      // Update conversation's last message
       await supabase
         .from('conversations')
         .update({
@@ -168,11 +222,16 @@ export function useMessages(conversationId: string | null) {
       console.error('Error sending message:', err);
       throw err;
     }
-  }, [conversationId, user]);
+  }, [conversationId, user?.id]);
 
   useEffect(() => {
+    isMounted.current = true;
     fetchMessages();
-  }, [conversationId, user?.id]);
+
+    return () => {
+      isMounted.current = false;
+    };
+  }, [conversationId]);
 
   return {
     messages,

@@ -45,7 +45,7 @@ export default function MessagesScreen() {
   };
 
   const handleConversationPress = (conversation: ConversationWithDetails) => {
-    showComingSoon('Chat');
+    router.push(`/chat/${conversation.id}`);
   };
 
   const renderConversation = ({ item }: { item: ConversationWithDetails }) => (
